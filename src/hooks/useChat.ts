@@ -21,7 +21,7 @@ export function useChat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [input, setInput] = useState('');
   const [settings, setSettings] = useState<Settings>(loadSettings);
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.1-flash-lite');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.8-flash');
 
   // Abort controller and animation ref
   const abortControllerRef = useRef<AbortController | null>(null);

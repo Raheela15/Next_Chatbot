@@ -8,7 +8,7 @@ const STORAGE_KEYS = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  defaultModel: 'gemini-3.1-flash-lite',
+  defaultModel: 'gemini-3.8-flash',
   systemInstruction: 'You are an intelligent, thoughtful, and articulate AI assistant powered by Google Gemini. Provide direct, helpful, well-structured answers using markdown formatting and clean code snippets when useful.',
   autoScroll: true,
   soundEnabled: false,

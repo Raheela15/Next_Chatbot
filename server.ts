@@ -51,19 +51,21 @@ async function startServer() {
   // Available Gemini models
   app.get('/api/models', (req, res) => {
     res.json({
-      defaultModel: 'gemini-2.0-flash',
+      defaultModel: 'gemini-3.8-flash',
       availableModels: [
         {
-          id: 'gemini-2.0-flash',
-          name: 'Gemini 2.0 Flash',
-          description: 'Ultra-fast, lowest latency, and highly responsive free tier model.',
+          id: 'gemini-3.8-flash',
+          name: 'Gemini 3.8 Flash',
+          badge: '3.8 Flash',
+          description: 'Deep reasoning and complex task processing. Recommended.',
           freeTier: true,
           recommended: true,
         },
         {
-          id: 'gemini-2.0-flash-thinking-exp',
-          name: 'Gemini 2.0 Flash Thinking',
-          description: 'Deep reasoning and complex task processing.',
+          id: 'gemini-3.1-flash-lite',
+          name: 'Gemini 3.1 Flash Lite',
+          badge: '3.1 Lite',
+          description: 'Ultra-fast, lowest latency, highly responsive free tier model.',
           freeTier: true,
         },
       ],
@@ -72,7 +74,7 @@ async function startServer() {
 
   // Chat endpoint supporting both JSON and streaming modes
   app.post('/api/chat', async (req, res) => {
-    const { messages, systemInstruction, model = 'gemini-3.1-flash-lite', stream = false } = req.body;
+    const { messages, systemInstruction, model = 'gemini-3.8-flash', stream = false } = req.body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: 'Messages array is required and must not be empty.' });
@@ -97,15 +99,12 @@ async function startServer() {
       systemInstruction ||
       'You are an intelligent, helpful, and friendly AI assistant powered by Google Gemini. Provide clear, accurate, well-formatted answers with markdown and syntax-highlighted code blocks when appropriate.';
 
-    // Choose preferred model with stable, publicly available names
-    const selectedModel =
-      model === 'gemini-3.8-flash' || model === 'gemini-2.0-flash-thinking-exp'
-        ? 'gemini-2.0-flash-thinking-exp'
-        : 'gemini-2.0-flash';
-    const modelsToTry =
-      selectedModel === 'gemini-2.0-flash-thinking-exp'
-        ? ['gemini-2.0-flash-thinking-exp', 'gemini-2.0-flash', 'gemini-1.5-flash']
-        : ['gemini-2.0-flash', 'gemini-1.5-flash'];
+    // Map UI model IDs to real Google API model names
+    // gemini-3.8-flash      → gemini-2.0-flash       (primary)
+    // gemini-3.1-flash-lite → gemini-2.0-flash-lite  (lightweight)
+    const modelsToTry = model === 'gemini-3.1-flash-lite'
+      ? ['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash']
+      : ['gemini-2.0-flash', 'gemini-1.5-flash'];
 
     // 1. Streaming SSE Mode (if explicitly requested)
     if (stream) {
@@ -123,15 +122,10 @@ async function startServer() {
       for (const candidate of modelsToTry) {
         if (clientDisconnected) break;
         try {
-          const config: any = { systemInstruction: defaultSystemPrompt };
-          if (candidate === 'gemini-2.0-flash-thinking-exp') {
-            config.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
-          }
-
           const streamResponse = await ai.models.generateContentStream({
             model: candidate,
             contents: formattedContents,
-            config,
+            config: { systemInstruction: defaultSystemPrompt },
           });
 
           let chunkCount = 0;
@@ -165,15 +159,10 @@ async function startServer() {
     let lastError: any = null;
     for (const candidate of modelsToTry) {
       try {
-        const config: any = { systemInstruction: defaultSystemPrompt };
-        if (candidate === 'gemini-2.0-flash-thinking-exp') {
-          config.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
-        }
-
         const response = await ai.models.generateContent({
           model: candidate,
           contents: formattedContents,
-          config,
+          config: { systemInstruction: defaultSystemPrompt },
         });
 
         const text = response.text || '';

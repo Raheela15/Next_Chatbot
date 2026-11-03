@@ -1,21 +1,32 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 
 /**
  * Sanitizes an API key by stripping wrapping quotes, backticks, and whitespace.
- * Users frequently copy keys from .env files with quotes like "AIzaSy...",
+ * Users frequently paste keys from .env files with quotes like "AIzaSy...",
  * which Vercel stores literally, causing Google APIs to reject with API_KEY_INVALID.
  */
 function sanitizeApiKey(raw: string | undefined): string {
   if (!raw) return '';
-  return raw
-    .trim()
-    .replace(/^[\"'`\s]+|[\"'`\s]+$/g, '')
-    .trim();
+  return raw.trim().replace(/^["'`\s]+|["'`\s]+$/g, '').trim();
+}
+
+/**
+ * Maps the UI model ID (sent by the frontend) to the real Google API model name.
+ *
+ *   gemini-3.8-flash      → gemini-2.0-flash       (primary: fast + capable)
+ *   gemini-3.1-flash-lite → gemini-2.0-flash-lite   (lightweight)
+ */
+function resolveModel(uiModelId: string): string[] {
+  if (uiModelId === 'gemini-3.1-flash-lite') {
+    return ['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  }
+  // Default: gemini-3.8-flash (and anything else) → gemini-2.0-flash
+  return ['gemini-2.0-flash', 'gemini-1.5-flash'];
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers
+  // ── CORS ────────────────────────────────────────────────────────────────────
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
@@ -23,11 +34,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed. Please use POST.' });
   }
 
+  // ── API Key ─────────────────────────────────────────────────────────────────
   const rawKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
   const apiKey = sanitizeApiKey(rawKey);
 
@@ -38,45 +49,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  const { messages, systemInstruction, model = 'gemini-2.0-flash', stream = false } = req.body || {};
+  // ── Request Body ────────────────────────────────────────────────────────────
+  const {
+    messages,
+    systemInstruction,
+    model = 'gemini-3.8-flash',
+    stream = false,
+  } = req.body || {};
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Messages array is required and must not be empty.' });
   }
 
-  const ai = new GoogleGenAI({
-    apiKey: apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build-vercel',
-      },
-    },
-  });
+  // ── Google GenAI Client ─────────────────────────────────────────────────────
+  const ai = new GoogleGenAI({ apiKey });
 
-  const formattedContents = messages.map((m: { role: string; content: string }) => {
-    const role = m.role === 'assistant' ? 'model' : 'user';
-    return {
-      role,
-      parts: [{ text: m.content || '' }],
-    };
-  });
+  const formattedContents = messages.map((m: { role: string; content: string }) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content || '' }],
+  }));
 
-  const defaultSystemPrompt =
+  const systemPrompt =
     systemInstruction ||
     'You are an intelligent, helpful, and friendly AI assistant powered by Google Gemini. Provide clear, accurate, well-formatted answers with markdown and syntax-highlighted code blocks when appropriate.';
 
-  // Use stable, publicly available model names
-  const selectedModel =
-    model === 'gemini-3.8-flash' || model === 'gemini-2.0-flash-thinking-exp'
-      ? 'gemini-2.0-flash-thinking-exp'
-      : 'gemini-2.0-flash';
+  const modelsToTry = resolveModel(model);
 
-  const modelsToTry =
-    selectedModel === 'gemini-2.0-flash-thinking-exp'
-      ? ['gemini-2.0-flash-thinking-exp', 'gemini-2.0-flash', 'gemini-1.5-flash']
-      : ['gemini-2.0-flash', 'gemini-1.5-flash'];
-
-  // Streaming SSE Mode
+  // ── Streaming SSE Mode ──────────────────────────────────────────────────────
   if (stream) {
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -85,15 +84,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (const candidate of modelsToTry) {
       try {
-        const config: any = { systemInstruction: defaultSystemPrompt };
-        if (candidate === 'gemini-2.0-flash-thinking-exp') {
-          config.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
-        }
-
         const streamResponse = await ai.models.generateContentStream({
           model: candidate,
           contents: formattedContents,
-          config,
+          config: { systemInstruction: systemPrompt },
         });
 
         let chunkCount = 0;
@@ -110,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.end();
         }
       } catch (err: any) {
-        console.warn(`Vercel streaming error on ${candidate}:`, err.message || err);
+        console.warn(`[stream] ${candidate} failed:`, err.message || err);
       }
     }
 
@@ -119,55 +113,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.end();
   }
 
-  // Standard JSON Mode
+  // ── Standard JSON Mode ──────────────────────────────────────────────────────
   let lastError: any = null;
   for (const candidate of modelsToTry) {
     try {
-      const config: any = { systemInstruction: defaultSystemPrompt };
-      if (candidate === 'gemini-2.0-flash-thinking-exp') {
-        config.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
-      }
-
       const response = await ai.models.generateContent({
         model: candidate,
         contents: formattedContents,
-        config,
+        config: { systemInstruction: systemPrompt },
       });
 
-      const text = response.text || '';
       return res.status(200).json({
-        text,
+        text: response.text || '',
         model: candidate,
         timestamp: Date.now(),
       });
     } catch (err: any) {
       lastError = err;
-      console.warn(`Vercel model ${candidate} error:`, err.message || err);
+      console.warn(`[json] ${candidate} failed:`, err.message || err);
     }
   }
 
-  // Parse error nicely if it's an API Key or Google error
+  // ── Friendly Error Messages ─────────────────────────────────────────────────
+  const rawMsg: string = lastError?.message || '';
   let friendlyMsg = 'Failed to generate response from Gemini API.';
-  const rawMsg = lastError?.message || '';
 
   if (rawMsg.includes('API_KEY_INVALID') || rawMsg.includes('API key not valid')) {
     friendlyMsg =
-      'Invalid Gemini API Key. Please check your Vercel Project Settings > Environment Variables, and ensure GEMINI_API_KEY is pasted as pure text without quotes (e.g. AIzaSy... NOT "AIzaSy...").';
+      'Invalid Gemini API Key. Please check Vercel Project Settings > Environment Variables and ensure GEMINI_API_KEY is pasted without quotes (e.g. AIzaSy... NOT "AIzaSy...").';
   } else if (rawMsg.includes('RESOURCE_EXHAUSTED') || rawMsg.includes('Quota exceeded')) {
     friendlyMsg = 'Gemini API quota exceeded. Please wait a moment or check your Google AI Studio plan.';
-  } else if (rawMsg.includes('not found') || rawMsg.includes('404') || rawMsg.includes('MODEL_NOT_FOUND')) {
-    friendlyMsg =
-      'The requested Gemini model is not available. The API may have changed — please contact support or check Google AI Studio for available models.';
+  } else if (rawMsg.includes('MODEL_NOT_FOUND') || rawMsg.includes('not found')) {
+    friendlyMsg = 'The requested Gemini model is not available. Please check Google AI Studio for supported models.';
   } else if (rawMsg) {
     try {
-      const parsed = JSON.parse(rawMsg);
-      friendlyMsg = parsed?.error?.message || rawMsg;
+      friendlyMsg = JSON.parse(rawMsg)?.error?.message || rawMsg;
     } catch {
       friendlyMsg = rawMsg;
     }
   }
 
-  return res.status(500).json({
-    error: friendlyMsg,
-  });
+  return res.status(500).json({ error: friendlyMsg });
 }
