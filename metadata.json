@@ -1,0 +1,6 @@
+{
+  "name": "Gemini AI Chatbot",
+  "description": "Fast, modern, and intelligent AI chatbot powered by Google Gemini API with real-time streaming, chat history, markdown code highlighting, and full local persistence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

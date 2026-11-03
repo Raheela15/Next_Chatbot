@@ -1,0 +1,166 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+  }
+
+  code, pre, kbd {
+    font-family: var(--font-mono);
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.4);
+}
+
+/* Code syntax highlighting tokens for Prism */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #64748b;
+  font-style: italic;
+}
+
+.token.punctuation {
+  color: #94a3b8;
+}
+
+.token.namespace {
+  opacity: 0.7;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: #f43f5e;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: #10b981;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string {
+  color: #38bdf8;
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: #818cf8;
+}
+
+.token.function,
+.token.class-name {
+  color: #fbbf24;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+  color: #fb923c;
+}
+
+.token.important,
+.token.bold {
+  font-weight: bold;
+}
+
+.token.italic {
+  font-style: italic;
+}
+
+/* Light mode overrides for Prism */
+html:not(.dark) .token.punctuation {
+  color: #64748b;
+}
+
+html:not(.dark) .token.property,
+html:not(.dark) .token.tag,
+html:not(.dark) .token.boolean,
+html:not(.dark) .token.number,
+html:not(.dark) .token.constant {
+  color: #e11d48;
+}
+
+html:not(.dark) .token.selector,
+html:not(.dark) .token.attr-name,
+html:not(.dark) .token.string,
+html:not(.dark) .token.builtin {
+  color: #059669;
+}
+
+html:not(.dark) .token.operator,
+html:not(.dark) .token.entity,
+html:not(.dark) .token.url {
+  color: #0284c7;
+}
+
+html:not(.dark) .token.atrule,
+html:not(.dark) .token.attr-value,
+html:not(.dark) .token.keyword {
+  color: #6366f1;
+}
+
+html:not(.dark) .token.function,
+html:not(.dark) .token.class-name {
+  color: #d97706;
+}
+
+/* Pulsing typing animation */
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.typing-dot-1 {
+  animation: typing-bounce 1.4s infinite ease-in-out;
+}
+
+.typing-dot-2 {
+  animation: typing-bounce 1.4s infinite ease-in-out 0.2s;
+}
+
+.typing-dot-3 {
+  animation: typing-bounce 1.4s infinite ease-in-out 0.4s;
+}
